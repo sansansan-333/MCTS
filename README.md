@@ -1,4 +1,4 @@
-# Mcts
+# MCTS
 進行中  
 References:  
 https://qiita.com/kaityo256/items/50155365323aaaaa3b3a  
