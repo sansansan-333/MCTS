@@ -1,4 +1,4 @@
-# MCTS
+# Mcts
 進行中  
 References:  
 https://qiita.com/kaityo256/items/50155365323aaaaa3b3a  
@@ -13,3 +13,7 @@ This is a project for me to understand MCTS better. As you can see in the first 
 
 # Usage 
 
+
+
+ビルド
+https://stackify.com/cross-platform-net-core-apps/
