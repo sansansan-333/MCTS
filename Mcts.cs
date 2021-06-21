@@ -21,18 +21,25 @@ namespace Mcts
             ttt.PlacePiece(0, 0, Piece.O);
             ttt.PlacePiece(1, 2, Piece.X);
 
-            ttt.PrintBoard("root");
-
-            Mcts mcts = new Mcts(Node.UCT);
-            mcts.SetRoot(
-                new GameInfo(
+            GameInfo gameInfo = new GameInfo(
                     player:Piece.O,
                     board_size_X,
                     board_size_Y,
                     ttt.Board2String(ttt.Board)
-                )
             );
-            mcts.RunAllSteps();
+
+            Mcts mcts = new Mcts(Node.UCT);
+            mcts.SetRoot(gameInfo);
+
+
+            for(int i = 0; i < 10000; i++){
+                Console.WriteLine(i);
+                mcts.RunAllSteps();
+            }
+
+            foreach(var child in mcts.root.Children){
+                child.PrintNode("-----------");
+            }
 
             Console.WriteLine("\nMain end");
         }
@@ -50,9 +57,11 @@ namespace Mcts
 
         public void RunAllSteps(){
             Select();
-            Expand();
-            bool is_win = Simulate();
-            BackPropagate(is_win);
+            bool expanded = Expand();
+            if(expanded){
+                float playout_result = Simulate();
+                BackPropagate(playout_result);
+            }
         }
 
         private Node target_leaf; // used among four steps below
@@ -63,29 +72,28 @@ namespace Mcts
                 child = child.SelectChild(totalPlayout);
             }
             target_leaf = child;
-            string bs = target_leaf.GameInfo.BoardString;
-            TicTacToe ttt = new TicTacToe(3, 3);
-            ttt.SetBoard(ttt.String2Board(bs));
-            ttt.PrintBoard("--------");
         }
 
-        private void Expand(){
+        private bool Expand(){
             if(target_leaf.PlayoutCount > EXPANDER_THRESHOLD){
-                target_leaf.SetPossibleChildren();
+                if(target_leaf.SetPossibleChildren() == false){
+                    return false;
+                }
                 target_leaf = target_leaf.SelectChild(totalPlayout);
             }
+            return true;
         }
 
-        private bool Simulate(){
+        private float Simulate(){
             totalPlayout++;
             return target_leaf.Playout();
         }
 
-        private void BackPropagate(bool is_win){
+        private void BackPropagate(float playout_result){
             Node updating_node = target_leaf;
             while(!updating_node.IsRoot()){
-                updating_node.UpdateInfo(is_win);
-                is_win = !is_win;
+                updating_node.UpdateInfo(playout_result);
+                playout_result = 1 - playout_result;
                 updating_node = updating_node.Parent;
             }
         }
@@ -94,27 +102,11 @@ namespace Mcts
     }
 
     class Node{
-        private int playoutCount;
-        public int PlayoutCount{
-            private set { this.playoutCount = value; }
-            get { return this.playoutCount; }
-        }
-        private int winCount;
-        public int WinCount{
-            private set { this.winCount = value; }
-            get { return this.winCount; }
-        }
+        public int PlayoutCount{ private set; get;}
+        public float WinCount{ private set; get; }
 
-        private Node parent = null;
-        public Node Parent{
-            private set { this.parent = value; }
-            get { return this.parent; }
-        }
-        private List<Node> children = new List<Node>();
-        public List<Node> Children{
-            private set { this.children = value; }
-            get { return this.children; }
-        }
+        public Node Parent{ private set; get; }
+        public List<Node> Children{ private set; get; }
 
         private string selectionFormula;
         static public readonly string UCT = nameof(UCT);
@@ -124,12 +116,14 @@ namespace Mcts
         //  <------- TicTacTie related end
 
         public Node(){
-            playoutCount=0;
+            PlayoutCount=0;
+            Children = new List<Node>();
         }
 
         public Node(GameInfo gameInfo){
             this.GameInfo = gameInfo;
-            playoutCount=0;
+            PlayoutCount=0;
+            Children = new List<Node>();
         }
 
         /// <summary>
@@ -137,7 +131,7 @@ namespace Mcts
         /// </summary>
         /// <returns></returns>
         public bool IsRoot(){
-            return parent == null;
+            return Parent == null;
         }
 
         /// <summary>
@@ -145,7 +139,7 @@ namespace Mcts
         /// </summary>
         /// <returns></returns>        
         public bool IsLeaf(){
-            return children.Count == 0;
+            return Children.Count == 0;
         }
 
         /// <summary>
@@ -163,14 +157,14 @@ namespace Mcts
         /// <returns></returns>
         public Node SelectChild(int totalPlayout){
             if(selectionFormula == null){
-                selectionFormula = parent.selectionFormula;
+                selectionFormula = Parent.selectionFormula;
             }
 
             if(selectionFormula == UCT){
                 // uctでえらぶ
                 float maxUCT = float.MinValue;
                 Node chosenChild = new Node();
-                foreach(var child in children){
+                foreach(var child in Children){
                     float UCT = child.GetUCT(totalPlayout);
                     if(UCT > maxUCT){
                         chosenChild = child;
@@ -195,13 +189,20 @@ namespace Mcts
             return SelectChild(totalPlayout);
         }
 
+        
         /// <summary>
         /// Set all possible children to this node.
         /// </summary>
-        public void SetPossibleChildren(){
+        /// <returns>false if no child node is found</returns>
+        public bool SetPossibleChildren(){
             // TicTacToe related function
             TicTacToe ttt = new TicTacToe(GameInfo.Board_size_X, GameInfo.Board_size_Y);
             var nextBoardStrs = ttt.GetAllNextBoardStrs(GameInfo.BoardString, GameInfo.Player);
+
+            if(nextBoardStrs.Count == 0){
+                return false;
+            }
+
             foreach(var nextBoard in nextBoardStrs){
                 GameInfo childGameInfo = new GameInfo(
                     TicTacToe.GetNextPlayer(GameInfo.Player),
@@ -210,24 +211,28 @@ namespace Mcts
                     nextBoard
                 );
                 Node child = new Node(childGameInfo);
+                child.Parent = this;
                 Children.Add(child);
             }
+
+            return true;
         }
 
         /// <summary>
         /// Perform a playout and return the result.
         /// </summary>
         /// <returns></returns>
-        public bool Playout(){
-            return true;
+        public float Playout(){
+            return GameInfo.Playout();
         }
 
         /// <summary>
         /// Update information about the number of wins and playouts.
         /// </summary>
         /// <param name="is_win"></param>
-        public void UpdateInfo(bool is_win){
-
+        public void UpdateInfo(float playout_result){
+            PlayoutCount++;
+            WinCount += playout_result;
         }
 
         /// <summary>
@@ -240,15 +245,26 @@ namespace Mcts
         public float GetUCT(int totalPlayout){
             float c = 1.414f;
             // I don't know what should be UCT when no playout has happened yet
-            // here it returns random value that is definitetly larger than normal case(below)
-            if(playoutCount == 0){
+            // here it returns random value that is definitetly larger than the UCT in normal case(below)
+            if(PlayoutCount == 0){
                 Random r = new Random();
                 return c*totalPlayout*totalPlayout + (float)r.NextDouble();
             }else{
-                float reword = (float)winCount / playoutCount;
-                float bias = (float)(c * Math.Pow(Math.Log(totalPlayout) / playoutCount, 0.5));
+                float reword = WinCount / PlayoutCount;
+                float bias = (float)(c * Math.Pow(Math.Log(totalPlayout) / PlayoutCount, 0.5));
                 return reword + bias;
             }
+        }
+
+        public void PrintNode(string title = ""){
+            if(!string.IsNullOrEmpty(title)){
+                Console.WriteLine(title);
+            }
+
+            Console.WriteLine("PlayoutCount: " + PlayoutCount);
+            Console.WriteLine("WinCount: " + WinCount);
+            Console.WriteLine("Win Rate: " + WinCount / PlayoutCount);
+            GameInfo.PrintGameInfo("<== GameInfo ==>");
         }
         
     }
@@ -264,6 +280,24 @@ namespace Mcts
             Board_size_X = board_size_X;
             Board_size_Y = board_size_Y;
             BoardString = boardString;
+        }
+
+        public float Playout(){
+            TicTacToe ttt = new TicTacToe(Board_size_X, Board_size_Y);
+            ttt.SetBoard(BoardString);
+            return ttt.Playout(Player, TicTacToe.GetNextPlayer(Player));
+        }
+
+        public void PrintGameInfo(string title = ""){
+            if(!string.IsNullOrEmpty(title)){
+                Console.WriteLine(title);
+            }
+
+            TicTacToe.PrintBoard(BoardString, Board_size_X, Board_size_Y);
+
+            Console.WriteLine("Player: " + Player);
+            Console.WriteLine("Board_size_X: " + Board_size_X);
+            Console.WriteLine("Board_size_Y: " + Board_size_Y);
         }
     }
     

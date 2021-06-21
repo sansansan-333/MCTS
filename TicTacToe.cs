@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using System.Collections.Generic;
+using System.Linq;
 
 public enum Piece{
     O,
@@ -10,11 +11,7 @@ public enum Piece{
 public class TicTacToe{
     private int board_size_X; // must be 2 or more
     private int board_size_Y; // must be 2 or more
-    private Piece[,] board;
-    public Piece[,] Board{
-        private set { this.board = value; }
-        get { return this.board; }
-    }
+    public Piece[,] Board{ private set; get; }
 
     public static readonly Piece[] playerOrder = {
         // Represent the order of players 
@@ -30,12 +27,22 @@ public class TicTacToe{
         this.board_size_X = board_size_X;
         this.board_size_Y = board_size_Y;
 
-        board = new Piece[board_size_X, board_size_Y];
+        Board = new Piece[board_size_X, board_size_Y];
         for(int x = 0; x < board_size_X; x++){
             for(int y = 0; y < board_size_Y; y++){
-                board[x, y] = Piece.N;
+                Board[x, y] = Piece.N;
             }
         }
+    }
+
+    /// <summary>
+    /// Copy constructor
+    /// </summary>
+    /// <param name="ttt"></param>
+    public TicTacToe(TicTacToe ttt){
+        board_size_X = ttt.board_size_X;
+        board_size_Y = ttt.board_size_Y;
+        Board = ttt.Board;
     }
 
     public bool PlacePiece(int x, int y, Piece piece){
@@ -44,8 +51,8 @@ public class TicTacToe{
             return false;
         }
 
-        if(board[x, y] == Piece.N){
-            board[x, y] = piece;
+        if(Board[x, y] == Piece.N){
+            Board[x, y] = piece;
             return true;
         }else{
             return false;
@@ -58,8 +65,13 @@ public class TicTacToe{
                return false;
         }
 
-        this.board = board;
+        this.Board = board;
         return true;
+    }
+
+    public bool SetBoard(string boardString){
+        var board = String2Board(boardString);
+        return SetBoard(board);
     }
 
     ///<summary>
@@ -71,18 +83,18 @@ public class TicTacToe{
     public Piece? GetWinner(){
         // Diagonal
         if(board_size_X == board_size_Y){
-            if(this.IsLineCompleted(0,0, board_size_X-1,board_size_Y-1)) return board[0,0];
-            if(this.IsLineCompleted(board_size_X-1,0, 0,board_size_Y-1)) return board[board_size_X-1,0];
+            if(this.IsLineCompleted(0,0, board_size_X-1,board_size_Y-1)) return Board[0,0];
+            if(this.IsLineCompleted(board_size_X-1,0, 0,board_size_Y-1)) return Board[board_size_X-1,0];
         }
 
         // Vertical
         for(int x = 0; x < board_size_X; x++){
-            if(this.IsLineCompleted(x,0, x,board_size_Y-1)) return board[x,0];
+            if(this.IsLineCompleted(x,0, x,board_size_Y-1)) return Board[x,0];
         }
 
         // Horizontal
         for(int y = 0; y < board_size_Y; y++){
-            if(this.IsLineCompleted(0,y, board_size_X-1,y)) return board[0,y];
+            if(this.IsLineCompleted(0,y, board_size_X-1,y)) return Board[0,y];
         }
         
         return null;
@@ -111,13 +123,13 @@ public class TicTacToe{
         int direction_x = diff_x == 0 ? 0 : (int)(diff_x/Abs(diff_x));
         int direction_y = diff_y == 0 ? 0 : (int)(diff_y/Abs(diff_y));
 
-        Piece first_piece = board[x, y];
+        Piece first_piece = Board[x, y];
         if(first_piece == Piece.N) return false;
 
         while(x != p2_x || y != p2_y){
             next_x = x + direction_x;
             next_y = y + direction_y;
-            if(first_piece != board[next_x, next_y]){
+            if(first_piece != Board[next_x, next_y]){
                 return false;
             }
             x = next_x;
@@ -134,7 +146,7 @@ public class TicTacToe{
         for(int x = 0; x < board_size_Y; x++){
             for(int y = 0; y < board_size_X; y++){
                 Console.Write("|");
-                Console.Write(board[y, x] == Piece.N ? " " : board[y, x].ToString());
+                Console.Write(Board[y, x] == Piece.N ? " " : Board[y, x].ToString());
             }
             Console.WriteLine("|");
         }
@@ -149,6 +161,11 @@ public class TicTacToe{
             }
             Console.WriteLine("|");
         }
+    }
+
+    public static void PrintBoard(string boardString, int board_size_X, int board_size_Y, string title=""){
+        var board = TicTacToe.String2Board(boardString, board_size_X, board_size_Y);
+        TicTacToe.PrintBoard(board, board_size_X, board_size_Y, title);
     }
 
     /// <summary>
@@ -193,13 +210,32 @@ public class TicTacToe{
         return result;
     }
 
+    public static Piece[,] String2Board(string boardString, int board_size_X, int board_size_Y){
+        Piece[,] result = new Piece[board_size_X, board_size_Y];
+        int str_i=0;
+
+        for(int x = 0; x < board_size_X; x++){
+            for(int y = 0; y < board_size_Y; y++){
+                Piece? p = String2Piece(boardString[str_i].ToString());
+                if(p == null){
+                    Console.Error.WriteLine(nameof(String2Board) + ": boardString has an invalid value.");
+                    return null;
+                }else{
+                    result[x,y] = (Piece)p;
+                    str_i++;
+                }
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>
     /// Convert a sting to Piece, such as "O" to Piece.O.
     /// </summary>
     /// <param name="pieceString"></param>
     /// <returns></returns>
-
-    private Piece? String2Piece(String pieceString){
+    private static Piece? String2Piece(String pieceString){
         foreach(Piece p in Enum.GetValues(typeof(Piece))){
             if(p.ToString() == pieceString){
                 return p;
@@ -249,6 +285,49 @@ public class TicTacToe{
         return boardStrings;
     }
 
+    public float Playout(Piece player, Piece nextPlayer){
+        Random r = new Random();
+
+        // Find all empty cells
+        List<Vector2> pointsToPlace = new List<Vector2>(); // list of empty cells
+        for(int x = 0; x < board_size_X; x++){
+            for(int y = 0; y < board_size_Y; y++){
+                if(Board[x,y] == Piece.N){
+                    pointsToPlace.Add(
+                        new Vector2(x, y)
+                    );
+                }
+            }
+        }
+        // Shuffle
+        pointsToPlace = pointsToPlace.OrderBy(a => r.Next(pointsToPlace.Count)).ToList();
+
+        // Copy this
+        TicTacToe ttt = new TicTacToe(this);
+
+        // Playout
+        Piece? winner = null;
+        foreach(var p in pointsToPlace){
+            ttt.PlacePiece(p.x, p.y, nextPlayer);
+
+            winner = ttt.GetWinner();
+            if(winner != null){
+                break;
+            }
+
+            nextPlayer = TicTacToe.GetNextPlayer(nextPlayer);
+        }
+
+        // Judge playout result
+        if(winner == null){
+            return 0.5f; // draw
+        }else if(winner == player){
+            return 1; // win
+        }else{
+            return 0; // lose
+        }
+    }
+
     public static Piece GetNextPlayer(Piece player){
         for(int i = 0; i < playerOrder.Length; i++){
             if(playerOrder[i] == player){
@@ -272,7 +351,7 @@ public class TicTacToe{
 }
 
 public class Vector2{
-    int x, y;
+    public int x, y;
 
     public Vector2(int x, int y){
         this.x = x;
