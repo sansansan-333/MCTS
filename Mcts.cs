@@ -5,44 +5,10 @@ namespace Mcts
 {
     public class Mcts
     {
-        private readonly int EXPANDER_THRESHOLD = 10;
-        private Node root;
+        private readonly int EXPANDER_THRESHOLD = 100;
+        public Node Root{ private set; get; }
         private int totalPlayout;
         private string selectionFormula;
-
-        static void Main(string[] args)
-        {
-            Console.WriteLine("Main start\n");
-
-            int board_size_X = 3;
-            int board_size_Y = 3;
-
-            TicTacToe ttt = new TicTacToe(board_size_X, board_size_Y);
-            ttt.PlacePiece(0, 0, Piece.O);
-            ttt.PlacePiece(1, 2, Piece.X);
-
-            GameInfo gameInfo = new GameInfo(
-                    player:Piece.O,
-                    board_size_X,
-                    board_size_Y,
-                    ttt.Board2String(ttt.Board)
-            );
-
-            Mcts mcts = new Mcts(Node.UCT);
-            mcts.SetRoot(gameInfo);
-
-
-            for(int i = 0; i < 10000; i++){
-                Console.WriteLine(i);
-                mcts.RunAllSteps();
-            }
-
-            foreach(var child in mcts.root.Children){
-                child.PrintNode("-----------");
-            }
-
-            Console.WriteLine("\nMain end");
-        }
 
         public Mcts(string selectionFormula){
             this.selectionFormula = selectionFormula;
@@ -50,9 +16,10 @@ namespace Mcts
         }
 
         public void SetRoot(GameInfo gameInfo){
-            root = new Node(gameInfo);
-            root.SetSelectionFormula(selectionFormula);
-            root.SetPossibleChildren();
+            Root = new Node(gameInfo);
+            Root.depth = 0;
+            Root.SetSelectionFormula(selectionFormula);
+            Root.SetPossibleChildren();
         }
 
         public void RunAllSteps(){
@@ -67,19 +34,19 @@ namespace Mcts
         private Node target_leaf; // used among four steps below
 
         private void Select(){
-            Node child = root;
+            Node child = Root;
             while(!child.IsLeaf()){
-                child = child.SelectChild(totalPlayout);
+                child = child.SelectChild(totalPlayout, Root.GameInfo);
             }
             target_leaf = child;
         }
 
         private bool Expand(){
-            if(target_leaf.PlayoutCount > EXPANDER_THRESHOLD){
+            if(target_leaf.PlayoutCount > EXPANDER_THRESHOLD && target_leaf.IsExpandable()){
                 if(target_leaf.SetPossibleChildren() == false){
                     return false;
                 }
-                target_leaf = target_leaf.SelectChild(totalPlayout);
+                target_leaf = target_leaf.SelectChild(totalPlayout, Root.GameInfo);
             }
             return true;
         }
@@ -91,17 +58,24 @@ namespace Mcts
 
         private void BackPropagate(float playout_result){
             Node updating_node = target_leaf;
-            while(!updating_node.IsRoot()){
+
+            while(true){
                 updating_node.UpdateInfo(playout_result);
                 playout_result = 1 - playout_result;
+                if(updating_node.IsRoot()){
+                    break;
+                }
                 updating_node = updating_node.Parent;
             }
         }
 
-        
+        public Move GetNextMove(){
+            var next_node = Root.SelectChild(totalPlayout, Root.GameInfo);
+            return next_node.GameInfo.PreMove;
+        }
     }
 
-    class Node{
+    public class Node{
         public int PlayoutCount{ private set; get;}
         public float WinCount{ private set; get; }
 
@@ -110,10 +84,9 @@ namespace Mcts
 
         private string selectionFormula;
         static public readonly string UCT = nameof(UCT);
-
-        // TicTacTie related start ------->
         public GameInfo GameInfo{ private set; get; }
-        //  <------- TicTacTie related end
+
+        public int depth;
 
         public Node(){
             PlayoutCount=0;
@@ -124,6 +97,20 @@ namespace Mcts
             this.GameInfo = gameInfo;
             PlayoutCount=0;
             Children = new List<Node>();
+        }
+
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        /// <param name="node"></param>
+        public Node(Node node){
+            PlayoutCount = node.PlayoutCount;
+            WinCount = node.WinCount;
+            Parent = node.Parent;
+            Children = node.Children;
+            selectionFormula = node.selectionFormula;
+            GameInfo = node.GameInfo;
+            depth = node.depth;
         }
 
         /// <summary>
@@ -143,6 +130,14 @@ namespace Mcts
         }
 
         /// <summary>
+        /// Return false if there is already winner in this node
+        /// </summary>
+        /// <returns></returns>
+        public bool IsExpandable(){
+            return GameInfo.IsExpandable();
+        }
+
+        /// <summary>
         /// Set the formula such as UCT that are used for selecting a child node.
         /// </summary>
         /// <param name="selectionFormula"></param>
@@ -155,17 +150,19 @@ namespace Mcts
         /// </summary>
         /// <param name="totalPlayout"></param>
         /// <returns></returns>
-        public Node SelectChild(int totalPlayout){
+        public Node SelectChild(int totalPlayout, GameInfo root_gameInfo){
             if(selectionFormula == null){
                 selectionFormula = Parent.selectionFormula;
             }
 
+            bool same_player = GameInfo.IsSamePlayer(this.GameInfo, root_gameInfo); // true if root player is the same to this node's player
+
             if(selectionFormula == UCT){
-                // uctでえらぶ
-                float maxUCT = float.MinValue;
                 Node chosenChild = new Node();
+
+                float maxUCT = float.MinValue;
                 foreach(var child in Children){
-                    float UCT = child.GetUCT(totalPlayout);
+                    float UCT = child.GetUCT(totalPlayout, root_gameInfo);
                     if(UCT > maxUCT){
                         chosenChild = child;
                         maxUCT = UCT;
@@ -173,7 +170,7 @@ namespace Mcts
                 }
                 return chosenChild;
             }else{
-                Console.Error.WriteLine(nameof(SelectChild) + "invalid selectionFormula.");
+                Console.Error.WriteLine(nameof(SelectChild) + ": invalid selectionFormula.");
                 return null;
             }
         }
@@ -184,9 +181,9 @@ namespace Mcts
         /// <param name="totalPlayout"></param>
         /// <param name="selectionFormula"></param>
         /// <returns></returns>
-        public Node SelectChild(int totalPlayout, string selectionFormula){
+        public Node SelectChild(int totalPlayout, string selectionFormula, GameInfo root_gameInfo){
             this.selectionFormula = selectionFormula;
-            return SelectChild(totalPlayout);
+            return SelectChild(totalPlayout, root_gameInfo);
         }
 
         
@@ -195,24 +192,13 @@ namespace Mcts
         /// </summary>
         /// <returns>false if no child node is found</returns>
         public bool SetPossibleChildren(){
-            // TicTacToe related function
-            TicTacToe ttt = new TicTacToe(GameInfo.Board_size_X, GameInfo.Board_size_Y);
-            var nextBoardStrs = ttt.GetAllNextBoardStrs(GameInfo.BoardString, GameInfo.Player);
+            var children = GameInfo.GetPossibleChildren();
+            if(children.Count == 0) return false;
 
-            if(nextBoardStrs.Count == 0){
-                return false;
-            }
-
-            foreach(var nextBoard in nextBoardStrs){
-                GameInfo childGameInfo = new GameInfo(
-                    TicTacToe.GetNextPlayer(GameInfo.Player),
-                    GameInfo.Board_size_X,
-                    GameInfo.Board_size_Y,
-                    nextBoard
-                );
-                Node child = new Node(childGameInfo);
+            Children.AddRange(children);
+            foreach(var child in Children){
                 child.Parent = this;
-                Children.Add(child);
+                child.depth = this.depth + 1;
             }
 
             return true;
@@ -242,7 +228,7 @@ namespace Mcts
         /// This method may return a random value, 
         /// which means every time you call, different value may come even from the same node.
         /// </remarks>
-        public float GetUCT(int totalPlayout){
+        public float GetUCT(int totalPlayout, GameInfo root_gameInfo){
             float c = 1.414f;
             // I don't know what should be UCT when no playout has happened yet
             // here it returns random value that is definitetly larger than the UCT in normal case(below)
@@ -250,9 +236,16 @@ namespace Mcts
                 Random r = new Random();
                 return c*totalPlayout*totalPlayout + (float)r.NextDouble();
             }else{
-                float reword = WinCount / PlayoutCount;
-                float bias = (float)(c * Math.Pow(Math.Log(totalPlayout) / PlayoutCount, 0.5));
-                return reword + bias;
+                if(GameInfo.IsSamePlayer(this.GameInfo, root_gameInfo)){
+                    float reword = WinCount / PlayoutCount;
+                    float bias = (float)(c * Math.Pow(Math.Log(totalPlayout) / PlayoutCount, 0.5));
+                    return reword + bias;
+                }
+                else{
+                    float reword = (PlayoutCount - WinCount) / PlayoutCount; // reverse player side
+                    float bias = (float)(c * Math.Pow(Math.Log(totalPlayout) / PlayoutCount, 0.5));
+                    return reword + bias;
+                }
             }
         }
 
@@ -266,26 +259,33 @@ namespace Mcts
             Console.WriteLine("Win Rate: " + WinCount / PlayoutCount);
             GameInfo.PrintGameInfo("<== GameInfo ==>");
         }
-        
     }
 
     public class GameInfo{
-        public Piece Player{ private set; get; }
+        public Piece Player{ set; get; }
         public int Board_size_X{ private set; get; } // must be 2 or more
         public int Board_size_Y{ private set; get; } // must be 2 or more
         public string BoardString{ set; get; }
+        public Move PreMove{ set; get; } // previous move
 
-        public GameInfo(Piece player, int board_size_X, int board_size_Y, string boardString){
+        public GameInfo(Piece player, int board_size_X, int board_size_Y, string boardString, Move preMove){
             Player = player;
             Board_size_X = board_size_X;
             Board_size_Y = board_size_Y;
             BoardString = boardString;
+            PreMove = preMove;
+        }
+
+        public bool IsExpandable(){
+            TicTacToe ttt = new TicTacToe(Board_size_X, Board_size_Y);
+            ttt.SetBoard(BoardString);
+            return ttt.GetWinner() == null;
         }
 
         public float Playout(){
             TicTacToe ttt = new TicTacToe(Board_size_X, Board_size_Y);
             ttt.SetBoard(BoardString);
-            return ttt.Playout(Player, TicTacToe.GetNextPlayer(Player));
+            return ttt.Playout(Player);
         }
 
         public void PrintGameInfo(string title = ""){
@@ -298,6 +298,36 @@ namespace Mcts
             Console.WriteLine("Player: " + Player);
             Console.WriteLine("Board_size_X: " + Board_size_X);
             Console.WriteLine("Board_size_Y: " + Board_size_Y);
+        }
+
+        public List<Node> GetPossibleChildren(){
+            TicTacToe ttt = new TicTacToe(Board_size_X, Board_size_Y);
+            var nextBoardInfos = ttt.GetAllNextBoards(ttt.String2Board(BoardString), Player);
+
+            List<Node> children = new List<Node>();
+
+            foreach(var nextBoardInfo in nextBoardInfos){
+                GameInfo childGameInfo = new GameInfo(
+                    TicTacToe.GetNextPlayer(Player),
+                    Board_size_X,
+                    Board_size_Y,
+                    nextBoardInfo.boardString,
+                    new Move(
+                        nextBoardInfo.x,
+                        nextBoardInfo.y,
+                        nextBoardInfo.piece
+                    )
+                );
+                Node child = new Node(childGameInfo);
+                children.Add(child);
+            }
+
+            return children;
+        }
+
+        public static bool IsSamePlayer(GameInfo gameInfo1, GameInfo gameInfo2){
+            if(gameInfo1.Player == gameInfo2.Player) return true;
+            else return false;
         }
     }
     

@@ -1,0 +1,18 @@
+// Start running code on VSCode
+Open terminal 
+$ dotnet run 
+
+
+///<summary>
+/// 
+///</summary>
+
+///<remarks>
+/// 
+///</remarks>
+
+for(int x = 0; x < board_size_X; x++){
+    for(int y = 0; y < board_size_Y; y++){
+
+    }
+}

@@ -12,6 +12,10 @@ public class TicTacToe{
     private int board_size_X; // must be 2 or more
     private int board_size_Y; // must be 2 or more
     public Piece[,] Board{ private set; get; }
+    public string BoardString{
+        private set{}
+        get {return Board2String(Board);}
+    }
 
     public static readonly Piece[] playerOrder = {
         // Represent the order of players 
@@ -42,7 +46,8 @@ public class TicTacToe{
     public TicTacToe(TicTacToe ttt){
         board_size_X = ttt.board_size_X;
         board_size_Y = ttt.board_size_Y;
-        Board = ttt.Board;
+        Board = new Piece[ttt.Board.GetLength(0),ttt.Board.GetLength(1)];
+        Array.Copy(ttt.Board, Board, ttt.Board.Length);
     }
 
     public bool PlacePiece(int x, int y, Piece piece){
@@ -136,6 +141,19 @@ public class TicTacToe{
             y = next_y;
         }
 
+        return true;
+    }
+
+    /// <summary>
+    /// Check if the board is full of pieces
+    /// </summary>
+    /// <returns></returns>
+    public bool IsFullBoard(){
+        for(int x = 0; x < board_size_X; x++){
+            for(int y = 0; y < board_size_Y; y++){
+                if(Board[x, y] == Piece.N) return false;
+            }
+        }
         return true;
     }
 
@@ -253,40 +271,43 @@ public class TicTacToe{
     /// <param name="nextPlayer"></param>
     /// <returns></returns>
 
-    public List<Piece[,]> GetAllNextBoards(Piece[,] board, Piece nextPlayer){
-        List<Piece[,]> boards = new List<Piece[,]>();
+    public List<TTTInfo> GetAllNextBoards(Piece[,] board, Piece nextPlayer){
+        List<TTTInfo> tttInfos = new List<TTTInfo>();
+
+        TTTInfo info;
         for(int x = 0; x < board_size_X; x++){
             for(int y = 0; y < board_size_Y; y++){
                 if(board[x,y] == Piece.N){
                     var tmpBoard = (Piece[,])board.Clone();
                     tmpBoard[x,y] = nextPlayer;
-                    boards.Add(tmpBoard);
+
+                    info = new TTTInfo(
+                        x,
+                        y,
+                        nextPlayer,
+                        Board2String(tmpBoard)
+                    );
+                    tttInfos.Add(info);
                 }
             }
         }
 
-        return boards;
+        return tttInfos;
     }
 
     /// <summary>
-    /// Return all next possible boards as string
+    /// 
     /// </summary>
-    /// <param name="boardString"></param>
-    /// <param name="nextPlayer"></param>
-    /// <returns></returns>
-    public List<string> GetAllNextBoardStrs(string boardString, Piece nextPlayer){
-        var boards = GetAllNextBoards(String2Board(boardString), nextPlayer);
-
-        List<string> boardStrings = new List<string>();
-        foreach(var board in boards){
-            boardStrings.Add(Board2String(board));
-        }
-
-        return boardStrings;
-    }
-
-    public float Playout(Piece player, Piece nextPlayer){
+    /// <param name="next_player"></param>
+    /// <returns>1: next_player wins, 0.5: draw, 0: lose</returns>
+    public float Playout(Piece next_player){
         Random r = new Random();
+
+        // If there is already a winner, return result
+        if(GetWinner() != null){
+            if(GetWinner() == next_player) return 1; // next_player wins(this condition should not be taken in MCTS however)
+            else return 0; // next_player loses
+        }
 
         // Find all empty cells
         List<Vector2> pointsToPlace = new List<Vector2>(); // list of empty cells
@@ -300,28 +321,29 @@ public class TicTacToe{
             }
         }
         // Shuffle
-        pointsToPlace = pointsToPlace.OrderBy(a => r.Next(pointsToPlace.Count)).ToList();
+        pointsToPlace = pointsToPlace.OrderBy(x => r.Next(pointsToPlace.Count)).ToList();
 
         // Copy this
         TicTacToe ttt = new TicTacToe(this);
 
-        // Playout
+        // Playout(random)
         Piece? winner = null;
+        Piece tmp_player = next_player;
         foreach(var p in pointsToPlace){
-            ttt.PlacePiece(p.x, p.y, nextPlayer);
+            ttt.PlacePiece(p.x, p.y, tmp_player);
 
             winner = ttt.GetWinner();
             if(winner != null){
                 break;
             }
 
-            nextPlayer = TicTacToe.GetNextPlayer(nextPlayer);
+            tmp_player = TicTacToe.GetNextPlayer(tmp_player);
         }
 
         // Judge playout result
         if(winner == null){
             return 0.5f; // draw
-        }else if(winner == player){
+        }else if(winner == next_player){
             return 1; // win
         }else{
             return 0; // lose
@@ -341,6 +363,14 @@ public class TicTacToe{
         return Piece.X;
     }
 
+    public static string GetInitBoard(int board_size_X, int board_size_Y){
+        StringBuilder board = new StringBuilder();
+        for(int i = 0; i < board_size_X*board_size_Y; i++){
+            board.Append(Piece.N.ToString());
+        }
+        return board.ToString();
+    }
+
     private float Abs(float x){
         return Math.Abs(x);
     }
@@ -356,5 +386,19 @@ public class Vector2{
     public Vector2(int x, int y){
         this.x = x;
         this.y = y;
+    }
+}
+
+public class TTTInfo{
+    public int x; // where the piece was placed
+    public int y; // where the piece was placed
+    public Piece piece; // what piece was placed
+    public string boardString; // current board
+    
+    public TTTInfo(int x, int y, Piece piece, string boardString){
+        this.x = x;
+        this.y = y;
+        this.piece = piece;
+        this.boardString = boardString;
     }
 }
