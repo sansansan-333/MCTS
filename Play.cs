@@ -14,9 +14,22 @@ public class Play{
 
     static void Main(string[] args){
         Console.WriteLine("Main start\n");
+        /*
+        string bs = "NNONONXOX";
+        MctsAI ai = new MctsAI(debug:true);
+        GameInfo gameInfo = new GameInfo(
+            Piece.X,
+            3, 3,
+            bs,
+            new Move(
+                2, 1,
+                Piece.O
+            )
+        );
+        ai.Think(gameInfo, 100000);*/
 
         Play tttPlay = new Play();
-        tttPlay.Setup(Piece.O, Piece.X, 3, 3, Piece.X);
+        tttPlay.Setup(Piece.O, Piece.X, 3, 3, Piece.O);
         tttPlay.StartGame();
 
         Console.WriteLine("\nMain end");

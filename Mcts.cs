@@ -5,7 +5,7 @@ namespace Mcts
 {
     public class Mcts
     {
-        private readonly int EXPANDER_THRESHOLD = 100;
+        private readonly int EXPANDER_THRESHOLD = 10;
         public Node Root{ private set; get; }
         private int totalPlayout;
         private string selectionFormula;
@@ -70,7 +70,9 @@ namespace Mcts
         }
 
         public Move GetNextMove(){
-            var next_node = Root.SelectChild(totalPlayout, Root.GameInfo);
+            string pre_selection_formula = Root.SelectionFormula;
+            var next_node = Root.SelectChild(totalPlayout, Node.WIN_RATE, Root.GameInfo);
+            Root.SetSelectionFormula(pre_selection_formula);
             return next_node.GameInfo.PreMove;
         }
     }
@@ -82,8 +84,9 @@ namespace Mcts
         public Node Parent{ private set; get; }
         public List<Node> Children{ private set; get; }
 
-        private string selectionFormula;
+        public string SelectionFormula{ private set; get; }
         static public readonly string UCT = nameof(UCT);
+        static public readonly string WIN_RATE = nameof(WIN_RATE);
         public GameInfo GameInfo{ private set; get; }
 
         public int depth;
@@ -108,7 +111,7 @@ namespace Mcts
             WinCount = node.WinCount;
             Parent = node.Parent;
             Children = node.Children;
-            selectionFormula = node.selectionFormula;
+            SelectionFormula = node.SelectionFormula;
             GameInfo = node.GameInfo;
             depth = node.depth;
         }
@@ -142,7 +145,7 @@ namespace Mcts
         /// </summary>
         /// <param name="selectionFormula"></param>
         public void SetSelectionFormula(string selectionFormula){
-            this.selectionFormula = selectionFormula;
+            this.SelectionFormula = selectionFormula;
         }
  
         /// <summary>
@@ -151,24 +154,34 @@ namespace Mcts
         /// <param name="totalPlayout"></param>
         /// <returns></returns>
         public Node SelectChild(int totalPlayout, GameInfo root_gameInfo){
-            if(selectionFormula == null){
-                selectionFormula = Parent.selectionFormula;
+            if(SelectionFormula == null){
+                SelectionFormula = Parent.SelectionFormula;
             }
 
             bool same_player = GameInfo.IsSamePlayer(this.GameInfo, root_gameInfo); // true if root player is the same to this node's player
 
-            if(selectionFormula == UCT){
-                Node chosenChild = new Node();
-
+            if(SelectionFormula == UCT){
+                Node chosen_child = new Node();
                 float maxUCT = float.MinValue;
                 foreach(var child in Children){
                     float UCT = child.GetUCT(totalPlayout, root_gameInfo);
                     if(UCT > maxUCT){
-                        chosenChild = child;
+                        chosen_child = child;
                         maxUCT = UCT;
                     }
                 }
-                return chosenChild;
+                return chosen_child;
+            }else if(SelectionFormula == WIN_RATE){
+                Node chosen_child = new Node();
+                float minRate = float.MaxValue, win_rate;
+                foreach(var child in Children){
+                    win_rate = child.GetWinRate();
+                    if(minRate > win_rate){
+                        chosen_child = child;
+                        minRate = win_rate;
+                    }
+                }
+                return chosen_child;
             }else{
                 Console.Error.WriteLine(nameof(SelectChild) + ": invalid selectionFormula.");
                 return null;
@@ -182,7 +195,7 @@ namespace Mcts
         /// <param name="selectionFormula"></param>
         /// <returns></returns>
         public Node SelectChild(int totalPlayout, string selectionFormula, GameInfo root_gameInfo){
-            this.selectionFormula = selectionFormula;
+            this.SelectionFormula = selectionFormula;
             return SelectChild(totalPlayout, root_gameInfo);
         }
 
@@ -236,6 +249,7 @@ namespace Mcts
                 Random r = new Random();
                 return c*totalPlayout*totalPlayout + (float)r.NextDouble();
             }else{
+                /*
                 if(GameInfo.IsSamePlayer(this.GameInfo, root_gameInfo)){
                     float reword = WinCount / PlayoutCount;
                     float bias = (float)(c * Math.Pow(Math.Log(totalPlayout) / PlayoutCount, 0.5));
@@ -246,6 +260,18 @@ namespace Mcts
                     float bias = (float)(c * Math.Pow(Math.Log(totalPlayout) / PlayoutCount, 0.5));
                     return reword + bias;
                 }
+                */
+                float reword = WinCount / PlayoutCount;
+                float bias = (float)(c * Math.Pow(Math.Log(totalPlayout) / PlayoutCount, 0.5));
+                return reword + bias;
+            }
+        }
+
+        public float GetWinRate(){
+            if(PlayoutCount == 0){
+                return 0;
+            }else{
+                return WinCount / PlayoutCount;
             }
         }
 

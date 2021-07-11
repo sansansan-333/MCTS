@@ -1,4 +1,6 @@
 # Mcts in TicTacToe
+Still in progress.
+
 References:  
 https://qiita.com/kaityo256/items/50155365323aaaaa3b3a  
 https://ja.wikipedia.org/wiki/%E3%83%A2%E3%83%B3%E3%83%86%E3%82%AB%E3%83%AB%E3%83%AD%E6%9C%A8%E6%8E%A2%E7%B4%A2
@@ -15,8 +17,7 @@ $ dotnet run
 ```
 
 # Notes
-- Mcts class and Node class are independent to TicTacToe.
-
+- Mcts classes are independent of TicTacToe. Only GameInfo is dependent on TicTacToe.
 
 - ビルド:
 https://stackify.com/cross-platform-net-core-apps/

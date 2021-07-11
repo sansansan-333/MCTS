@@ -4,9 +4,11 @@ namespace Mcts{
     public class MctsAI{
 
         private Mcts mcts;
+        private bool debug;
 
-        public MctsAI(){
+        public MctsAI(bool debug = false){
             mcts = new Mcts(Node.UCT);
+            this.debug = debug;
         }
 
         public Move Think(GameInfo gameInfo, int iterate_count){
@@ -16,7 +18,7 @@ namespace Mcts{
                 mcts.RunAllSteps();
             }
 
-            // Debug();
+            if(debug) Debug();
 
             return mcts.GetNextMove();
         }
